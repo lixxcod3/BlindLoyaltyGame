@@ -3,8 +3,10 @@
 #include "character.h"
 #include "menu.h"
 #include "tilemap.h"
+#include "scene2.h" // <-- 1. Include the new Scene 2 file
 
-typedef enum { SCREEN_MENU, SCREEN_GAMEPLAY } GameScreen;
+// 2. Add SCREEN_SCENE2 to your enum
+typedef enum { SCREEN_MENU, SCREEN_SCENE2, SCREEN_GAMEPLAY } GameScreen;
 
 int main(void) {
     const int vWidth = 1280;
@@ -30,6 +32,10 @@ int main(void) {
     Player player;
     InitPlayer(&player, FindWalkableSpawn(&map));
 
+    // 3. Initialize Scene 2
+    Scene2 scene2 = { 0 };
+    InitScene2(&scene2);
+
     Camera2D camera = { 0 };
     camera.offset = (Vector2){ vWidth / 2.0f, vHeight / 2.0f };
     camera.target = player.pos;
@@ -47,10 +53,20 @@ int main(void) {
             (mouse.y - (GetScreenHeight() - (vHeight * scale)) * 0.5f) / scale
         };
 
+        // --- UPDATE LOGIC ---
         if (currentScreen == SCREEN_MENU) {
             int action = UpdateMenu(&menu, vMouse, vWidth, vHeight);
-            if (action == 1) currentScreen = SCREEN_GAMEPLAY;
+            // 4. Action 1 now takes you to the cutscene instead of gameplay
+            if (action == 1) currentScreen = SCREEN_SCENE2; 
             if (action == 2) break;
+        }
+        else if (currentScreen == SCREEN_SCENE2) {
+            // 5. Update Scene 2 and wait for the player to press Enter
+            UpdateScene2(&scene2);
+            
+            if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) {
+                currentScreen = SCREEN_GAMEPLAY;
+            }
         }
         else if (currentScreen == SCREEN_GAMEPLAY) {
             UpdatePlayer(&player, &map);
@@ -59,11 +75,17 @@ int main(void) {
             if (IsKeyPressed(KEY_ESCAPE)) currentScreen = SCREEN_MENU;
         }
 
+        // --- DRAWING LOGIC ---
         BeginTextureMode(target);
             ClearBackground(BLACK);
 
             if (currentScreen == SCREEN_MENU) {
                 DrawMenu(&menu, vWidth, vHeight);
+            }
+            else if (currentScreen == SCREEN_SCENE2) {
+                // 6. Draw Scene 2
+                DrawScene2(&scene2, vWidth, vHeight);
+                DrawText("PRESS ENTER TO CONTINUE", vWidth - 300, vHeight - 40, 20, LIGHTGRAY);
             }
             else {
                 BeginMode2D(camera);
@@ -96,6 +118,8 @@ int main(void) {
         EndDrawing();
     }
 
+    // 7. Cleanup Scene 2 Memory
+    UnloadScene2(&scene2);
     UnloadPlayer(&player);
     UnloadTilemap(&map);
     UnloadTexture(menu.background);
