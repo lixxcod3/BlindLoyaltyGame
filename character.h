@@ -46,6 +46,10 @@ typedef struct Player {
 
     Texture2D texUI;
 
+    Sound walkSfx;
+    float walkSfxTimer;
+    float walkSfxInterval;
+
     bool isDead;
 } Player;
 
@@ -90,6 +94,10 @@ static inline void InitPlayer(Player *p, Vector2 startPos) {
 
     p->texUI = LoadTexture("images/GUI/Reuben_Chat.png");
 
+    p->walkSfx = LoadSound("audio/Sfx/walk.mp3");
+    p->walkSfxTimer = 0.0f;
+    p->walkSfxInterval = 0.32f;
+
     p->isDead = false;
 }
 
@@ -132,6 +140,11 @@ static inline void UpdatePlayer(Player *p, const Tilemap *map) {
 
     float dt = GetFrameTime();
     Vector2 direction = { 0.0f, 0.0f };
+
+    if (p->walkSfxTimer > 0.0f) {
+        p->walkSfxTimer -= dt;
+        if (p->walkSfxTimer < 0.0f) p->walkSfxTimer = 0.0f;
+    }
 
     if (IsKeyDown(KEY_D)) { direction.x += 1.0f; p->currentLine = 1; }
     if (IsKeyDown(KEY_A)) { direction.x -= 1.0f; p->currentLine = 2; }
@@ -197,6 +210,11 @@ static inline void UpdatePlayer(Player *p, const Tilemap *map) {
             p->currentSpeed = walkSpeed;
             p->frameSpeed = 0.16f;
             p->activeTex = &p->texWalk;
+
+            if (p->walkSfxTimer <= 0.0f) {
+                PlaySound(p->walkSfx);
+                p->walkSfxTimer = p->walkSfxInterval;
+            }
         }
 
         Vector2 nextPos = p->pos;
@@ -224,6 +242,7 @@ static inline void UpdatePlayer(Player *p, const Tilemap *map) {
     } else {
         p->currentFrame = 2;
         p->frameTimer = 0.0f;
+        p->walkSfxTimer = 0.0f;
     }
 }
 
@@ -291,6 +310,7 @@ static inline void UnloadPlayer(Player *p) {
     UnloadTexture(p->texWalk);
     UnloadTexture(p->texRun);
     UnloadTexture(p->texUI);
+    UnloadSound(p->walkSfx);
 }
 
 #endif

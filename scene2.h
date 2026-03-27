@@ -3,8 +3,11 @@
 
 #include "raylib.h"
 #include <string.h>
+#include <stdbool.h>
 
-// ---> NEW: Enum to track the sequence of Scene 2 <---
+#define SCENE2_TEXT_LEAD_SECONDS 2.0f
+#define SCENE2_MIN_TEXT_DURATION 0.15f
+
 typedef enum {
     SCENE2_FADE_IN,
     SCENE2_TEXT,
@@ -12,131 +15,182 @@ typedef enum {
     SCENE2_DONE
 } Scene2State;
 
-// Structure to hold our scene's assets and data
 typedef struct {
-    // Background Panning Data
     Texture2D bgTexture;
-    float bgScrollX;     
-    float bgScrollSpeed; 
-    
-    // Scene Assets
-    Scene2State currentState; // <-- NEW
+    float bgScrollX;
+    float bgScrollSpeed;
+
+    Scene2State currentState;
     const char* name;
     const char* dialogue;
 
-    // Typewriter Effect Data
     int dialogueLength;
     int charsDrawn;
     float textTimer;
     float textSpeed;
-    float fadeAlpha; // <-- NEW
+    float fadeAlpha;
+
+    Sound narratorVoice;
+    bool narratorPlayed;
+    float narratorDuration;
 } Scene2;
 
-// --- IMPLEMENTATIONS ---
+static inline float Scene2LoadVoiceWithDuration(const char* path, Sound* outSound) {
+    Wave wave = LoadWave(path);
 
-static inline void InitScene2(Scene2* scene) {
-    // Load the static PNG background
-    scene->bgTexture = LoadTexture("images/Background/Scene/Scene2.jpg");
-    
-    // Setup Background Panning
-    scene->bgScrollX = 0.0f;
-    scene->bgScrollSpeed = -15.0f; 
-    
-    // Start with a fade-in from black to match the end of Scene 1
-    scene->currentState = SCENE2_FADE_IN;
-    scene->fadeAlpha = 1.0f; 
-    
-    scene->name = "Narrator";
-    
-    scene->dialogue = "Your name is Reuben. You grew up in a city that was constantly afraid.\nNews reports spoke about threats, attacks, and instability.";
+    float duration = 0.0f;
+    if (wave.frameCount > 0 && wave.sampleRate > 0) {
+        duration = (float)wave.frameCount / (float)wave.sampleRate;
+    }
 
-    scene->dialogueLength = TextLength(scene->dialogue); 
-    scene->charsDrawn = 0;                               
-    scene->textTimer = 0.0f;
-    scene->textSpeed = 0.04f;                            
+    *outSound = LoadSoundFromWave(wave);
+    UnloadWave(wave);
+
+    return duration;
 }
 
-// ---> CHANGED: Added mousePos, mouseClicked, and screenWidth parameters <---
+static inline float Scene2CalcTextSpeed(const char* text, float voiceDuration, float fallbackSpeed) {
+    int units = TextLength(text);
+    if (units <= 0) return fallbackSpeed;
+    if (voiceDuration <= 0.0f) return fallbackSpeed;
+
+    float targetTextDuration = voiceDuration - SCENE2_TEXT_LEAD_SECONDS;
+    if (targetTextDuration < SCENE2_MIN_TEXT_DURATION) {
+        targetTextDuration = SCENE2_MIN_TEXT_DURATION;
+    }
+
+    return targetTextDuration / (float)units;
+}
+
+static inline void Scene2RevealTextSync(int* charsDrawn, int maxChars, float* timer, float charDelay) {
+    if (*charsDrawn >= maxChars) return;
+
+    *timer += GetFrameTime();
+
+    if (charDelay <= 0.0f) {
+        *charsDrawn = maxChars;
+        *timer = 0.0f;
+        return;
+    }
+
+    while (*timer >= charDelay && *charsDrawn < maxChars) {
+        (*charsDrawn)++;
+        *timer -= charDelay;
+    }
+}
+
+static inline void Scene2PlayNarratorIfNeeded(Scene2* scene) {
+    if (!scene->narratorPlayed) {
+        PlaySound(scene->narratorVoice);
+        scene->narratorPlayed = true;
+    }
+}
+
+static inline void InitScene2(Scene2* scene) {
+    scene->bgTexture = LoadTexture("images/Background/Scene/Scene2.jpg");
+
+    scene->bgScrollX = 0.0f;
+    scene->bgScrollSpeed = -15.0f;
+
+    scene->currentState = SCENE2_FADE_IN;
+    scene->fadeAlpha = 1.0f;
+
+    scene->name = "Narrator";
+    scene->dialogue =
+        "Your name is Reuben. You grew up in a city that was constantly afraid.\n"
+        "News reports spoke about threats, attacks, and instability.";
+
+    scene->dialogueLength = TextLength(scene->dialogue);
+    scene->charsDrawn = 0;
+    scene->textTimer = 0.0f;
+    scene->textSpeed = 0.04f;
+
+    scene->narratorDuration = Scene2LoadVoiceWithDuration("audio/Voice/Scene 2/Narrator.mp3", &scene->narratorVoice);
+    scene->narratorPlayed = false;
+    scene->textSpeed = Scene2CalcTextSpeed(scene->dialogue, scene->narratorDuration, scene->textSpeed);
+}
+
 static inline void UpdateScene2(Scene2* scene, Vector2 mousePos, bool mouseClicked, int screenWidth) {
-    // --- 1. PAN BACKGROUND (Always moving!) ---
+    (void)mousePos;
+    (void)screenWidth;
+
     scene->bgScrollX += scene->bgScrollSpeed * GetFrameTime();
 
-    // --- 2. STATE MACHINE ---
     if (scene->currentState == SCENE2_FADE_IN) {
-        scene->fadeAlpha -= GetFrameTime() * 0.7f; 
+        scene->fadeAlpha -= GetFrameTime() * 0.7f;
         if (scene->fadeAlpha <= 0.0f) {
             scene->fadeAlpha = 0.0f;
-            scene->currentState = SCENE2_TEXT; 
+            scene->currentState = SCENE2_TEXT;
+            Scene2PlayNarratorIfNeeded(scene);
         }
     }
     else if (scene->currentState == SCENE2_TEXT) {
+        Scene2PlayNarratorIfNeeded(scene);
+
         if (scene->charsDrawn < scene->dialogueLength) {
-            scene->textTimer += GetFrameTime();
-            if (scene->textTimer >= scene->textSpeed) {
-                scene->charsDrawn++;
-                scene->textTimer = 0.0f; 
-            }
-            // Skip typing if clicked
+            Scene2RevealTextSync(&scene->charsDrawn, scene->dialogueLength, &scene->textTimer, scene->textSpeed);
+
             if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE) || mouseClicked) {
                 scene->charsDrawn = scene->dialogueLength;
+                StopSound(scene->narratorVoice);
             }
-        } 
+        }
         else {
-            // Proceed to fade out
             if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE) || mouseClicked) {
+                StopSound(scene->narratorVoice);
                 scene->currentState = SCENE2_FADE_OUT;
             }
         }
     }
     else if (scene->currentState == SCENE2_FADE_OUT) {
-        scene->fadeAlpha += GetFrameTime() * 0.7f; 
+        scene->fadeAlpha += GetFrameTime() * 0.7f;
         if (scene->fadeAlpha >= 1.0f) {
             scene->fadeAlpha = 1.0f;
-            scene->currentState = SCENE2_DONE; 
+            StopSound(scene->narratorVoice);
+            scene->currentState = SCENE2_DONE;
         }
     }
 }
 
 static inline void DrawScene2(Scene2* scene, int screenWidth, int screenHeight) {
-    // 1. Draw Panning Background
     float bgScale = (float)screenHeight / scene->bgTexture.height;
     float scaledWidth = scene->bgTexture.width * bgScale;
 
-    // Handles infinite loop snapping whether panning left or right
     if (scene->bgScrollX <= -scaledWidth || scene->bgScrollX >= scaledWidth) {
         scene->bgScrollX = 0.0f;
     }
 
-    // Draw main image
     DrawTextureEx(scene->bgTexture, (Vector2){ scene->bgScrollX, 0 }, 0.0f, bgScale, WHITE);
-    
-    // Draw secondary image to fill the gap
-    float secondX = (scene->bgScrollSpeed < 0) ? (scene->bgScrollX + scaledWidth) : (scene->bgScrollX - scaledWidth);
+
+    float secondX = (scene->bgScrollSpeed < 0)
+        ? (scene->bgScrollX + scaledWidth)
+        : (scene->bgScrollX - scaledWidth);
+
     DrawTextureEx(scene->bgTexture, (Vector2){ secondX, 0 }, 0.0f, bgScale, WHITE);
 
-
-    // 2. Draw Chatbox (Only when text is active)
     if (scene->currentState == SCENE2_TEXT) {
-        Rectangle chatBox = { 20, 520, (float)(screenWidth - 40), 160 }; 
+        Rectangle chatBox = { 20, 520, (float)(screenWidth - 40), 160 };
         DrawRectangleRec(chatBox, Fade(BLACK, 0.7f));
         DrawRectangleLinesEx(chatBox, 4.0f, LIGHTGRAY);
 
         Rectangle nameBox = { 20, 480, 200, 40 };
         DrawRectangleRec(nameBox, Fade(BLACK, 0.85f));
         DrawRectangleLinesEx(nameBox, 3.0f, LIGHTGRAY);
-        DrawText(scene->name, nameBox.x + 20, nameBox.y + 10, 24, WHITE);
+        DrawText(scene->name, (int)nameBox.x + 20, (int)nameBox.y + 10, 24, WHITE);
 
-        DrawText(TextSubtext(scene->dialogue, 0, scene->charsDrawn), chatBox.x + 40, chatBox.y + 35, 28, RAYWHITE);
+        DrawText(TextSubtext(scene->dialogue, 0, scene->charsDrawn),
+                 (int)chatBox.x + 40, (int)chatBox.y + 35, 28, RAYWHITE);
     }
 
-    // 3. Draw Fade Overlay
     if (scene->fadeAlpha > 0.0f) {
         DrawRectangle(0, 0, screenWidth, screenHeight, Fade(BLACK, scene->fadeAlpha));
     }
 }
 
 static inline void UnloadScene2(Scene2* scene) {
-    UnloadTexture(scene->bgTexture); 
+    StopSound(scene->narratorVoice);
+    UnloadSound(scene->narratorVoice);
+    UnloadTexture(scene->bgTexture);
 }
 
-#endif // SCENE2_H
+#endif // 

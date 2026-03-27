@@ -12,8 +12,7 @@
 #include "scene5.h"
 #include "scene6.h"
 
-// --- MEMBUKA KUNCI IMPLEMENTASI (WAJIB) ---
-// Bagian ini memberi tahu kompiler C untuk mengubah file .h menjadi kode logika utuh
+
 #define ENEMY_IMPLEMENTATION
 #include "enemy.h"
 
@@ -92,18 +91,19 @@ static void ResetGameplay(Player *player, Tilemap *map,
                           Camera2D *camera, KeyItem *key,
                           Pickup hearts[], Pickup speeds[],
                           Texture2D *heartTexture, Texture2D *speedTexture,
-                          bool *gameWon, bool *showInstructions) {
+                          bool *gameWon, bool *showInstructions,
+                          bool *loseSfxPlayed, bool *winSfxPlayed) {
     UnloadPlayer(player);
     InitPlayer(player, FindWalkableSpawn(map));
 
     for (int i = 0; i < regularCount; i++) {
         UnloadEnemy(&regulars[i]);
-        InitBandit(&regulars[i], (Vector2){ 0.0f, 0.0f }); // PERBAIKAN: Gunakan InitBandit
-        regulars[i].active = false; // Matikan dulu sampai di-spawn oleh manager
+        InitBandit(&regulars[i], (Vector2){ 0.0f, 0.0f }); 
+        regulars[i].active = false; 
     }
 
     UnloadEnemy(boss);
-    InitBossBandit(boss, (Vector2){ 0.0f, 0.0f }); // PERBAIKAN: Gunakan InitBossBandit
+    InitBossBandit(boss, (Vector2){ 0.0f, 0.0f }); 
     boss->active = false;
 
     for (int i = 0; i < PLAYER_HISTORY_SIZE; i++) {
@@ -119,6 +119,8 @@ static void ResetGameplay(Player *player, Tilemap *map,
 
     *gameWon = false;
     *showInstructions = true;
+    *loseSfxPlayed = false;
+    *winSfxPlayed = false;
 }
 
 int main(void) {
@@ -158,6 +160,9 @@ int main(void) {
     RenderTexture2D target = LoadRenderTexture(vWidth, vHeight);
 
     Music menuMusic = { 0 }; Music storyMusic = { 0 }; Music inGameMusic = { 0 };
+    Sound pressButtonSfx = { 0 };
+    Sound loseSfx = { 0 };
+    Sound winSfx = { 0 };
     Music *activeMusic = NULL;
 
     bool fadeOutMusic = false;
@@ -171,6 +176,9 @@ int main(void) {
 
     bool gameWon = false;
     bool showInstructions = true;
+    bool loseSfxPlayed = false;
+    bool winSfxPlayed = false;
+    bool sfxLoaded = false;
 
     while (!WindowShouldClose()) {
         Vector2 mouse = GetMousePosition();
@@ -180,8 +188,13 @@ int main(void) {
             (mouse.y - (GetScreenHeight() - (vHeight * scale)) * 0.5f) / scale
         };
         bool mouseClicked = IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
+        bool enterPressed = IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER);
 
-        if (activeMusic != NULL) UpdateMusicStream(*activeMusic);
+        if (sfxLoaded && (enterPressed || mouseClicked)) {
+            PlaySound(pressButtonSfx);
+        }
+
+        if (activeMusic != NULL && IsMusicStreamPlaying(*activeMusic)) UpdateMusicStream(*activeMusic);
 
         if (fadeOutMusic && activeMusic != NULL) {
             musicVolume -= GetFrameTime();
@@ -202,7 +215,13 @@ int main(void) {
             switch (loadStep) {
                 case 0:
                     menu.background = LoadTexture("images/Background/TitleBackground.PNG");
-                    menuMusic = LoadMusicStream("Music/MainMenu.ogg"); storyMusic = LoadMusicStream("Music/Story.ogg"); inGameMusic = LoadMusicStream("Music/ingame.ogg");
+                    menuMusic = LoadMusicStream("music/MainMenu.ogg");
+                    storyMusic = LoadMusicStream("music/Story.ogg");
+                    inGameMusic = LoadMusicStream("music/ingame.ogg");
+                    pressButtonSfx = LoadSound("audio/Sfx/press_button.mp3");
+                    loseSfx = LoadSound("audio/Sfx/lose.mp3");
+                    winSfx = LoadSound("audio/Sfx/find_objective.mp3");
+                    sfxLoaded = true;
                     key.texture = LoadTexture("images/Elements/key.png"); heartTexture = LoadTexture("images/Elements/heart.png"); speedTexture = LoadTexture("images/Elements/speed.png");
                     loadProgress = 0.12f; loadStep++; break;
                 case 1:
@@ -216,7 +235,6 @@ int main(void) {
                     SpawnPickups(&map, hearts, HEART_COUNT, &heartTexture, speeds, SPEED_COUNT, &speedTexture);
                     loadProgress = 0.36f; loadStep++; break;
                 case 3:
-                    // PERBAIKAN: Gunakan InitBandit dan InitBossBandit
                     for (int i = 0; i < MAX_REGULAR_ENEMIES; i++) {
                         InitBandit(&regularBandits[i], (Vector2){0});
                         regularBandits[i].active = false;
@@ -252,7 +270,8 @@ int main(void) {
                 if (scene6.currentState == SCENE6_DONE) {
                     ResetGameplay(&player, &map, regularBandits, MAX_REGULAR_ENEMIES, &bossBandit,
                                   playerHistory, &historyIndex, &enemySpawner, &camera, &key, 
-                                  hearts, speeds, &heartTexture, &speedTexture, &gameWon, &showInstructions);
+                                  hearts, speeds, &heartTexture, &speedTexture, &gameWon, &showInstructions,
+                                  &loseSfxPlayed, &winSfxPlayed);
                     fadeOutMusic = true; nextScreenAfterFade = SCREEN_GAMEPLAY;
                 }
             }
@@ -280,10 +299,31 @@ int main(void) {
                 UpdateBossBandit(&bossBandit, regularBandits, MAX_REGULAR_ENEMIES, &player, &map);
             }
 
+            if (player.isDead && !loseSfxPlayed) {
+                loseSfxPlayed = true;
+                winSfxPlayed = false;
+                StopMusicStream(inGameMusic);
+                PlaySound(loseSfx);
+            }
+
+            if (gameWon && !winSfxPlayed) {
+                winSfxPlayed = true;
+                loseSfxPlayed = false;
+                StopMusicStream(inGameMusic);
+                PlaySound(winSfx);
+            }
+
             if ((player.isDead || gameWon) && IsKeyPressed(KEY_R)) {
                 ResetGameplay(&player, &map, regularBandits, MAX_REGULAR_ENEMIES, &bossBandit,
                               playerHistory, &historyIndex, &enemySpawner, &camera, &key, 
-                              hearts, speeds, &heartTexture, &speedTexture, &gameWon, &showInstructions);
+                              hearts, speeds, &heartTexture, &speedTexture, &gameWon, &showInstructions,
+                              &loseSfxPlayed, &winSfxPlayed);
+                StopSound(loseSfx);
+                StopSound(winSfx);
+                activeMusic = &inGameMusic;
+                musicVolume = 1.0f;
+                SetMusicVolume(inGameMusic, musicVolume);
+                PlayMusicStream(inGameMusic);
             }
             if (IsKeyPressed(KEY_ESCAPE)) { fadeOutMusic = true; nextScreenAfterFade = SCREEN_MENU; }
         }
@@ -354,6 +394,10 @@ cleanup:
     UnloadTexture(heartTexture); UnloadTexture(speedTexture);
     UnloadRenderTexture(target);
     UnloadMusicStream(menuMusic); UnloadMusicStream(storyMusic); UnloadMusicStream(inGameMusic);
+    UnloadEnemyAttackSfx();
+    UnloadSound(pressButtonSfx);
+    UnloadSound(loseSfx);
+    UnloadSound(winSfx);
     
     CloseAudioDevice();
     CloseWindow();
