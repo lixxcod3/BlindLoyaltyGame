@@ -1,2 +1,2 @@
-Soldier|Move! Work faster!
-Soldier|You think food grows by itself? Keep going!
+Soldier|Move! Work faster! |audio/Voice/Scene 8/Soldier part 1.mp3
+Soldier|You think food grows by itself? Keep going! |audio/Voice/Scene 8/Soldier part 2.mp3

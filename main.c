@@ -18,6 +18,12 @@
 #define BOSS_BANDIT_IMPLEMENTATION
 #include "boss_bandit.h"
 
+#define SECURITY_GUARD_IMPLEMENTATION
+#include "security_guard.h"
+
+#define OASIS_MEDIA_CEO_IMPLEMENTATION
+#include "oasis_media_ceo.h"
+
 #define ENEMY_MANAGER_IMPLEMENTATION
 #include "enemy_manager.h"
 
@@ -28,7 +34,7 @@
 #include "objective.h"
 
 #define GAMEPLAY_IMPLEMENTATION
-#include "gameplay.h" // <-- Including your new gameplay logic
+#include "gameplay.h"
 
 typedef enum {
     SCREEN_LOADING,
@@ -48,8 +54,23 @@ typedef enum {
     SCREEN_SCENE8,
     SCREEN_SCENE9,
     SCREEN_SCENE10,
-    SCREEN_SCENE11
+    SCREEN_SCENE11,
+    SCREEN_GAMEPLAY2
 } GameScreen;
+
+static const GameplayConfig GAMEPLAY1_CONFIG = {
+    .useSecurityTheme = false,
+    .avoidEnemyText = "BANDITS",
+    .regularSpawnText = "Bandits arrive in 5 seconds...",
+    .bossSpawnText = "Boss arrives in 7 seconds..."
+};
+
+static const GameplayConfig GAMEPLAY2_CONFIG = {
+    .useSecurityTheme = true,
+    .avoidEnemyText = "SECURITY GUARDS",
+    .regularSpawnText = "Security guards arrive in 5 seconds...",
+    .bossSpawnText = "Oasis Media CEO arrives in 7 seconds..."
+};
 
 SceneData scene1_data = {
     .bgPath = "images/Background/Scene/Scene1.png",
@@ -112,7 +133,7 @@ SceneData scene7_data = {
     .doFadeOut = true,
     .portraitCount = 2,
     .portraits = {
-        { "Reuben", "images/Character/Reuben/ReubenChat.png", 0.28f, 20.0f }, 
+        { "Reuben", "images/Character/Reuben/ReubenChat.png", 0.28f, 20.0f },
         { "Boss Bandit", "images/Character/Boss_Bandit/BossBanditChat.png", 0.32f, 20.0f }
     },
 };
@@ -124,7 +145,7 @@ SceneData scene8_data = {
     .doFadeOut = true,
     .portraitCount = 1,
     .portraits = {
-        { "Soldier", "images/Character/Soldier/SoldierChat.png", 0.30f, 20.0f } 
+        { "Soldier", "images/Character/Soldier/SoldierChat.png", 0.30f, 20.0f }
     }
 };
 
@@ -172,7 +193,7 @@ static void ResetAllScenes(
     StoryScene* s5, SceneData* sd5, StoryScene* s6, SceneData* sd6,
     StoryScene* s7, SceneData* sd7, StoryScene* s8, SceneData* sd8,
     StoryScene* s9, SceneData* sd9, StoryScene* s10, SceneData* sd10,
-    StoryScene* s11, SceneData* sd11) 
+    StoryScene* s11, SceneData* sd11)
 {
     InitStoryScene(s1, sd1);
     InitStoryScene(s2, sd2);
@@ -185,6 +206,22 @@ static void ResetAllScenes(
     InitStoryScene(s9, sd9);
     InitStoryScene(s10, sd10);
     InitStoryScene(s11, sd11);
+}
+
+static bool IsGameplayScreen(GameScreen screen) {
+    return screen == SCREEN_GAMEPLAY || screen == SCREEN_GAMEPLAY2;
+}
+
+static GameplayState *GetGameplayStateForScreen(GameScreen screen, GameplayState *gameState1, GameplayState *gameState2) {
+    return (screen == SCREEN_GAMEPLAY2) ? gameState2 : gameState1;
+}
+
+static void SetupGameplayState(GameplayState *state, const GameplayConfig *config, int vWidth, int vHeight) {
+    state->config = config;
+    state->camera.offset = (Vector2){ vWidth / 2.0f, vHeight / 2.0f };
+    state->camera.rotation = 0.0f;
+    state->camera.zoom = 3.0f;
+    ResetGameplay(state);
 }
 
 int main(void) {
@@ -208,8 +245,8 @@ int main(void) {
         .activeLoadSlot = -1
     };
 
-    // The new bundled gameplay state struct!
-    GameplayState gameState = { 0 };
+    GameplayState gameState1 = { 0 };
+    GameplayState gameState2 = { 0 };
 
     StoryScene scene1 = { 0 };
     StoryScene scene2 = { 0 };
@@ -271,7 +308,7 @@ int main(void) {
 
                 if ((currentScreen >= SCREEN_SCENE1 && currentScreen <= SCREEN_SCENE6) || (currentScreen >= SCREEN_SCENE7 && currentScreen <= SCREEN_SCENE11)) {
                     activeMusic = &storyMusic;
-                } else if (currentScreen == SCREEN_GAMEPLAY) {
+                } else if (IsGameplayScreen(currentScreen)) {
                     activeMusic = &inGameMusic;
                 } else if (currentScreen == SCREEN_MENU) {
                     activeMusic = &menuMusic;
@@ -299,52 +336,49 @@ int main(void) {
                     loseSfx = LoadSound("audio/Sfx/lose.mp3");
                     winSfx = LoadSound("audio/Sfx/find_objective.mp3");
                     sfxLoaded = true;
-                    gameState.key.texture = LoadTexture("images/Elements/key.png");
-                    gameState.heartTexture = LoadTexture("images/Elements/heart.png");
-                    gameState.speedTexture = LoadTexture("images/Elements/speed.png");
-                    loadProgress = 0.10f;
+                    loadProgress = 0.08f;
                     loadStep++;
                     break;
+
                 case 1:
-                    if (!LoadTilemap(&gameState.map, "maps/map1/map1.json")) goto cleanup;
-                    loadProgress = 0.18f;
+                    gameState1.config = &GAMEPLAY1_CONFIG;
+                    gameState2.config = &GAMEPLAY2_CONFIG;
+
+                    gameState1.key.texture = LoadTexture("images/Elements/key.png");
+                    gameState1.heartTexture = LoadTexture("images/Elements/heart.png");
+                    gameState1.speedTexture = LoadTexture("images/Elements/speed.png");
+
+                    gameState2.key.texture = LoadTexture("images/Elements/key.png");
+                    gameState2.heartTexture = LoadTexture("images/Elements/heart.png");
+                    gameState2.speedTexture = LoadTexture("images/Elements/speed.png");
+
+                    if (!LoadTilemap(&gameState1.map, "maps/map1/map1.json")) goto cleanup;
+                    if (!LoadTilemap(&gameState2.map, "maps/map2/map2.json")) goto cleanup;
+
+                    loadProgress = 0.22f;
                     loadStep++;
                     break;
+
                 case 2:
-                    InitPlayer(&gameState.player, FindWalkableSpawn(&gameState.map));
-                    gameState.camera.offset = (Vector2){ vWidth / 2.0f, vHeight / 2.0f };
-                    gameState.camera.rotation = 0.0f;
-                    gameState.camera.zoom = 3.0f;
-                    gameState.camera.target = gameState.player.pos;
-                    for (int i = 0; i < PLAYER_HISTORY_SIZE; i++) gameState.playerHistory[i] = gameState.player.pos;
-                    ResetKey(&gameState.key);
-                    SpawnPickups(&gameState.map, gameState.hearts, HEART_COUNT, &gameState.heartTexture, gameState.speeds, SPEED_COUNT, &gameState.speedTexture);
-                    loadProgress = 0.25f;
-                    loadStep++;
-                    break;
-                case 3:
-                    for (int i = 0; i < MAX_REGULAR_ENEMIES; i++) {
-                        InitBandit(&gameState.regularBandits[i], (Vector2){ 0 });
-                        gameState.regularBandits[i].active = false;
-                    }
-                    InitBossBandit(&gameState.bossBandit, (Vector2){ 0 });
-                    gameState.bossBandit.active = false;
-                    InitEnemySpawner(&gameState.enemySpawner);
+                    SetupGameplayState(&gameState1, &GAMEPLAY1_CONFIG, vWidth, vHeight);
+                    SetupGameplayState(&gameState2, &GAMEPLAY2_CONFIG, vWidth, vHeight);
                     loadProgress = 0.32f;
                     loadStep++;
                     break;
-                case 4: LoadSceneDialogue("data/scene1.txt", &scene1_data); InitStoryScene(&scene1, &scene1_data); loadProgress = 0.40f; loadStep++; break;
-                case 5: LoadSceneDialogue("data/scene2.txt", &scene2_data); InitStoryScene(&scene2, &scene2_data); loadProgress = 0.48f; loadStep++; break;
-                case 6: LoadSceneDialogue("data/scene3.txt", &scene3_data); InitStoryScene(&scene3, &scene3_data); loadProgress = 0.55f; loadStep++; break;
-                case 7: LoadSceneDialogue("data/scene4.txt", &scene4_data); InitStoryScene(&scene4, &scene4_data); loadProgress = 0.62f; loadStep++; break;
-                case 8: LoadSceneDialogue("data/scene5.txt", &scene5_data); InitStoryScene(&scene5, &scene5_data); loadProgress = 0.70f; loadStep++; break;
-                case 9: LoadSceneDialogue("data/scene6.txt", &scene6_data); InitStoryScene(&scene6, &scene6_data); loadProgress = 0.75f; loadStep++; break;
-                case 10: LoadSceneDialogue("data/scene7.txt", &scene7_data); InitStoryScene(&scene7, &scene7_data); loadProgress = 0.80f; loadStep++; break;
-                case 11: LoadSceneDialogue("data/scene8.txt", &scene8_data); InitStoryScene(&scene8, &scene8_data); loadProgress = 0.85f; loadStep++; break;
-                case 12: LoadSceneDialogue("data/scene9.txt", &scene9_data); InitStoryScene(&scene9, &scene9_data); loadProgress = 0.90f; loadStep++; break;
-                case 13: LoadSceneDialogue("data/scene10.txt", &scene10_data); InitStoryScene(&scene10, &scene10_data); loadProgress = 0.95f; loadStep++; break;
-                case 14: LoadSceneDialogue("data/scene11.txt", &scene11_data); InitStoryScene(&scene11, &scene11_data); loadProgress = 1.0f; loadStep++; break;
-                case 15:
+
+                case 3:  LoadSceneDialogue("data/scene1.txt", &scene1_data);   InitStoryScene(&scene1, &scene1_data);   loadProgress = 0.40f; loadStep++; break;
+                case 4:  LoadSceneDialogue("data/scene2.txt", &scene2_data);   InitStoryScene(&scene2, &scene2_data);   loadProgress = 0.46f; loadStep++; break;
+                case 5:  LoadSceneDialogue("data/scene3.txt", &scene3_data);   InitStoryScene(&scene3, &scene3_data);   loadProgress = 0.52f; loadStep++; break;
+                case 6:  LoadSceneDialogue("data/scene4.txt", &scene4_data);   InitStoryScene(&scene4, &scene4_data);   loadProgress = 0.58f; loadStep++; break;
+                case 7:  LoadSceneDialogue("data/scene5.txt", &scene5_data);   InitStoryScene(&scene5, &scene5_data);   loadProgress = 0.64f; loadStep++; break;
+                case 8:  LoadSceneDialogue("data/scene6.txt", &scene6_data);   InitStoryScene(&scene6, &scene6_data);   loadProgress = 0.70f; loadStep++; break;
+                case 9:  LoadSceneDialogue("data/scene7.txt", &scene7_data);   InitStoryScene(&scene7, &scene7_data);   loadProgress = 0.76f; loadStep++; break;
+                case 10: LoadSceneDialogue("data/scene8.txt", &scene8_data);   InitStoryScene(&scene8, &scene8_data);   loadProgress = 0.82f; loadStep++; break;
+                case 11: LoadSceneDialogue("data/scene9.txt", &scene9_data);   InitStoryScene(&scene9, &scene9_data);   loadProgress = 0.88f; loadStep++; break;
+                case 12: LoadSceneDialogue("data/scene10.txt", &scene10_data); InitStoryScene(&scene10, &scene10_data); loadProgress = 0.94f; loadStep++; break;
+                case 13: LoadSceneDialogue("data/scene11.txt", &scene11_data); InitStoryScene(&scene11, &scene11_data); loadProgress = 1.0f;  loadStep++; break;
+
+                case 14:
                     activeMusic = &menuMusic;
                     SetMusicVolume(*activeMusic, 1.0f);
                     PlayMusicStream(*activeMusic);
@@ -354,19 +388,30 @@ int main(void) {
         }
         else if (currentScreen == SCREEN_MENU) {
             int action = UpdateMenu(&menu, vMouse, vWidth, vHeight);
-            if (action == 1) { 
+            if (action == 1) {
                 ResetAllScenes(
-                    &scene1, &scene1_data, &scene2, &scene2_data, &scene3, &scene3_data, 
-                    &scene4, &scene4_data, &scene5, &scene5_data, &scene6, &scene6_data, 
-                    &scene7, &scene7_data, &scene8, &scene8_data, &scene9, &scene9_data, 
+                    &scene1, &scene1_data, &scene2, &scene2_data, &scene3, &scene3_data,
+                    &scene4, &scene4_data, &scene5, &scene5_data, &scene6, &scene6_data,
+                    &scene7, &scene7_data, &scene8, &scene8_data, &scene9, &scene9_data,
                     &scene10, &scene10_data, &scene11, &scene11_data
                 );
-                fadeOutMusic = true; 
-                nextScreenAfterFade = SCREEN_SCENE1; 
+                fadeOutMusic = true;
+                nextScreenAfterFade = SCREEN_SCENE1;
             }
-            if (action == 2) { RefreshSaveSlots(&menu); currentScreen = SCREEN_LOAD_GAME; menu.subSelected = 0; menu.activeLoadSlot = -1; }
-            if (action == 3) { pausedFromScreen = SCREEN_MENU; currentScreen = SCREEN_SETTINGS; menu.subSelected = 0; }
-            if (action == 4) { break; }
+            if (action == 2) {
+                RefreshSaveSlots(&menu);
+                currentScreen = SCREEN_LOAD_GAME;
+                menu.subSelected = 0;
+                menu.activeLoadSlot = -1;
+            }
+            if (action == 3) {
+                pausedFromScreen = SCREEN_MENU;
+                currentScreen = SCREEN_SETTINGS;
+                menu.subSelected = 0;
+            }
+            if (action == 4) {
+                break;
+            }
         }
         else if (currentScreen == SCREEN_LOAD_GAME) {
             int action = UpdateLoadMenu(&menu, vMouse, vWidth, vHeight);
@@ -375,12 +420,18 @@ int main(void) {
                 int slot = action - 10;
                 GameSaveData data;
                 if (LoadGameData(slot, &data)) {
-                    ResetGameplay(&gameState);
-                    gameState.player.pos = data.playerPos;
-                    gameState.player.health = data.health;
-                    gameState.player.energy = data.energy;
-                    gameState.camera.target = gameState.player.pos;
-                    gameState.showInstructions = false;
+                    GameplayState *targetState = &gameState1;
+                    if ((GameScreen)data.savedScreen == SCREEN_GAMEPLAY2) {
+                        targetState = &gameState2;
+                    }
+
+                    ResetGameplay(targetState);
+                    targetState->player.pos = data.playerPos;
+                    targetState->player.health = data.health;
+                    targetState->player.energy = data.energy;
+                    targetState->camera.target = targetState->player.pos;
+                    targetState->showInstructions = false;
+
                     fadeOutMusic = true;
                     nextScreenAfterFade = (GameScreen)data.savedScreen;
                 }
@@ -421,32 +472,33 @@ int main(void) {
                 else if (currentScreen == SCREEN_SCENE6) {
                     UpdateStoryScene(&scene6, vMouse, mouseClicked, vWidth);
                     if (scene6.currentState == SCENE_STATE_DONE) {
-                        ResetGameplay(&gameState);
+                        ResetGameplay(&gameState1);
                         fadeOutMusic = true;
                         nextScreenAfterFade = SCREEN_GAMEPLAY;
                     }
                 }
-                else if (currentScreen == SCREEN_SCENE7) { 
+                else if (currentScreen == SCREEN_SCENE7) {
                     UpdateStoryScene(&scene7, vMouse, mouseClicked, vWidth);
                     if (scene7.currentState == SCENE_STATE_DONE) currentScreen = SCREEN_SCENE8;
                 }
-                else if (currentScreen == SCREEN_SCENE8) { 
+                else if (currentScreen == SCREEN_SCENE8) {
                     UpdateStoryScene(&scene8, vMouse, mouseClicked, vWidth);
                     if (scene8.currentState == SCENE_STATE_DONE) currentScreen = SCREEN_SCENE9;
                 }
-                else if (currentScreen == SCREEN_SCENE9) { 
+                else if (currentScreen == SCREEN_SCENE9) {
                     UpdateStoryScene(&scene9, vMouse, mouseClicked, vWidth);
                     if (scene9.currentState == SCENE_STATE_DONE) currentScreen = SCREEN_SCENE10;
                 }
-                else if (currentScreen == SCREEN_SCENE10) { 
+                else if (currentScreen == SCREEN_SCENE10) {
                     UpdateStoryScene(&scene10, vMouse, mouseClicked, vWidth);
                     if (scene10.currentState == SCENE_STATE_DONE) currentScreen = SCREEN_SCENE11;
                 }
-                else if (currentScreen == SCREEN_SCENE11) { 
+                else if (currentScreen == SCREEN_SCENE11) {
                     UpdateStoryScene(&scene11, vMouse, mouseClicked, vWidth);
                     if (scene11.currentState == SCENE_STATE_DONE) {
+                        ResetGameplay(&gameState2);
                         fadeOutMusic = true;
-                        nextScreenAfterFade = SCREEN_MENU;
+                        nextScreenAfterFade = SCREEN_GAMEPLAY2;
                     }
                 }
             }
@@ -455,8 +507,7 @@ int main(void) {
             bool requestPause = false;
             bool requestNextScene = false;
 
-            // Notice how clean this is now!
-            UpdateGameplay(&gameState, menu.keys, loseSfx, winSfx, inGameMusic, &requestPause, &requestNextScene, mouseClicked);
+            UpdateGameplay(&gameState1, menu.keys, loseSfx, winSfx, inGameMusic, &requestPause, &requestNextScene, mouseClicked);
 
             if (requestPause) {
                 pausedFromScreen = currentScreen;
@@ -466,7 +517,24 @@ int main(void) {
 
             if (requestNextScene) {
                 fadeOutMusic = true;
-                nextScreenAfterFade = SCREEN_SCENE7; 
+                nextScreenAfterFade = SCREEN_SCENE7;
+            }
+        }
+        else if (currentScreen == SCREEN_GAMEPLAY2) {
+            bool requestPause = false;
+            bool requestNextScene = false;
+
+            UpdateGameplay(&gameState2, menu.keys, loseSfx, winSfx, inGameMusic, &requestPause, &requestNextScene, mouseClicked);
+
+            if (requestPause) {
+                pausedFromScreen = currentScreen;
+                currentScreen = SCREEN_PAUSE;
+                menu.subSelected = 0;
+            }
+
+            if (requestNextScene) {
+                fadeOutMusic = true;
+                nextScreenAfterFade = SCREEN_MENU;
             }
         }
         else if (currentScreen == SCREEN_PAUSE) {
@@ -483,13 +551,17 @@ int main(void) {
                 int slot = action - 20;
                 GameSaveData data = { 0 };
                 strcpy(data.name, menu.saveInput);
-                
-                // Saving from our new struct
-                data.playerPos = gameState.player.pos;
-                data.health = gameState.player.health;
-                data.energy = gameState.player.energy;
+
+                GameplayState *stateToSave = &gameState1;
+                if (IsGameplayScreen(pausedFromScreen)) {
+                    stateToSave = GetGameplayStateForScreen(pausedFromScreen, &gameState1, &gameState2);
+                }
+
+                data.playerPos = stateToSave->player.pos;
+                data.health = stateToSave->player.health;
+                data.energy = stateToSave->player.energy;
                 data.savedScreen = (int)pausedFromScreen;
-                
+
                 SaveGameData(slot, data);
                 currentScreen = SCREEN_PAUSE;
             }
@@ -529,8 +601,10 @@ render_phase:
                 else if (bgScreen == SCREEN_SCENE11) DrawStoryScene(&scene11, vWidth, vHeight);
             }
             else if (bgScreen == SCREEN_GAMEPLAY) {
-                // Notice how clean the rendering is now!
-                DrawGameplay(&gameState, vWidth, vHeight);
+                DrawGameplay(&gameState1, vWidth, vHeight);
+            }
+            else if (bgScreen == SCREEN_GAMEPLAY2) {
+                DrawGameplay(&gameState2, vWidth, vHeight);
             }
 
             if (currentScreen == SCREEN_PAUSE) DrawPauseMenu(&menu, vWidth, vHeight);
@@ -556,28 +630,36 @@ render_phase:
     }
 
 cleanup:
-    UnloadStoryScene(&scene1); UnloadSceneData(&scene1_data);
-    UnloadStoryScene(&scene2); UnloadSceneData(&scene2_data);
-    UnloadStoryScene(&scene3); UnloadSceneData(&scene3_data);
-    UnloadStoryScene(&scene4); UnloadSceneData(&scene4_data);
-    UnloadStoryScene(&scene5); UnloadSceneData(&scene5_data);
-    UnloadStoryScene(&scene6); UnloadSceneData(&scene6_data);
-    UnloadStoryScene(&scene7); UnloadSceneData(&scene7_data);
-    UnloadStoryScene(&scene8); UnloadSceneData(&scene8_data);
-    UnloadStoryScene(&scene9); UnloadSceneData(&scene9_data);
+    UnloadStoryScene(&scene1);  UnloadSceneData(&scene1_data);
+    UnloadStoryScene(&scene2);  UnloadSceneData(&scene2_data);
+    UnloadStoryScene(&scene3);  UnloadSceneData(&scene3_data);
+    UnloadStoryScene(&scene4);  UnloadSceneData(&scene4_data);
+    UnloadStoryScene(&scene5);  UnloadSceneData(&scene5_data);
+    UnloadStoryScene(&scene6);  UnloadSceneData(&scene6_data);
+    UnloadStoryScene(&scene7);  UnloadSceneData(&scene7_data);
+    UnloadStoryScene(&scene8);  UnloadSceneData(&scene8_data);
+    UnloadStoryScene(&scene9);  UnloadSceneData(&scene9_data);
     UnloadStoryScene(&scene10); UnloadSceneData(&scene10_data);
     UnloadStoryScene(&scene11); UnloadSceneData(&scene11_data);
 
-    // Unloading everything straight from the single struct
-    for (int i = 0; i < MAX_REGULAR_ENEMIES; i++) UnloadEnemy(&gameState.regularBandits[i]);
-    UnloadEnemy(&gameState.bossBandit);
-    UnloadPlayer(&gameState.player);
-    UnloadTilemap(&gameState.map);
+    for (int i = 0; i < MAX_REGULAR_ENEMIES; i++) UnloadEnemy(&gameState1.regularBandits[i]);
+    UnloadEnemy(&gameState1.bossBandit);
+    UnloadPlayer(&gameState1.player);
+    UnloadTilemap(&gameState1.map);
 
-    UnloadTexture(gameState.key.texture);
-    UnloadTexture(gameState.heartTexture);
-    UnloadTexture(gameState.speedTexture);
-    
+    for (int i = 0; i < MAX_REGULAR_ENEMIES; i++) UnloadEnemy(&gameState2.regularBandits[i]);
+    UnloadEnemy(&gameState2.bossBandit);
+    UnloadPlayer(&gameState2.player);
+    UnloadTilemap(&gameState2.map);
+
+    UnloadTexture(gameState1.key.texture);
+    UnloadTexture(gameState1.heartTexture);
+    UnloadTexture(gameState1.speedTexture);
+
+    UnloadTexture(gameState2.key.texture);
+    UnloadTexture(gameState2.heartTexture);
+    UnloadTexture(gameState2.speedTexture);
+
     UnloadTexture(menu.background);
     UnloadTexture(menu.settingsBg);
     UnloadTexture(menu.saveBg);

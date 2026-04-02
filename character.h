@@ -109,8 +109,8 @@ static inline void InitPlayer(Player *p, Vector2 startPos) {
 
     /* Regeneration and running cost */
     p->runDrainPerSecond = 40.0f;
-    p->energyRegenPerSecond = 6.0f;
-    p->healthRegenPerSecond = 0.4f;
+    p->energyRegenPerSecond = 0.0f;
+    p->healthRegenPerSecond = 0.0f;
 
     /* Slow effect applied after taking damage */
     p->damageSlowMultiplier = 0.80f;
@@ -181,7 +181,7 @@ static inline void AddPlayerEnergy(Player *p, float amount) {
 }
 
 /*
- * Update player input, movement, stamina, regeneration,
+ * Update player input, movement, stamina,
  * collision, sound, and animation each frame.
  *
  * Parameters:
@@ -239,23 +239,16 @@ static inline void UpdatePlayer(Player *p, const Tilemap *map, Keybinds keys) {
                      (p->energy > 0.0f) &&
                      (p->exhaustionTimer <= 0.0f);
 
-    /* Running drains energy; otherwise energy regenerates */
+    /* Running drains energy; otherwise there is no passive energy regeneration */
     if (isRunning) {
         p->energy -= p->runDrainPerSecond * dt;
         if (p->energy <= 0.0f) {
             p->energy = 0.0f;
             p->exhaustionTimer = 2.0f;
         }
-    } else {
-        if (p->exhaustionTimer <= 0.0f) {
-            p->energy += p->energyRegenPerSecond * dt;
-            if (p->energy > p->maxEnergy) p->energy = p->maxEnergy;
-        }
     }
 
-    /* Passive health regeneration */
-    p->health += p->healthRegenPerSecond * dt;
-    if (p->health > p->maxHealth) p->health = p->maxHealth;
+    /* No passive health regeneration */
 
     /* Safety death check */
     if (p->health <= 0.0f) {
@@ -378,15 +371,25 @@ static inline void DrawPlayerUI(Player *p) {
     if (healthRatio < 0.0f) healthRatio = 0.0f;
     if (healthRatio > 1.0f) healthRatio = 1.0f;
 
-    DrawRectangle((int)barX, (int)redY, (int)(redBarW * healthRatio), (int)barH, MAROON);
-    DrawRectangle((int)barX, (int)redY, (int)(redBarW * healthRatio), (int)(barH / 2.0f), RED);
+    Rectangle healthBarBack = { barX, redY, redBarW, barH };
+    Rectangle healthBarFront = { barX, redY, redBarW * healthRatio, barH };
+    Rectangle healthBarHighlight = { barX, redY, redBarW * healthRatio, barH / 2.0f };
+
+    DrawRectangleRec(healthBarBack, (Color){ 45, 10, 10, 180 });
+    DrawRectangleRec(healthBarFront, MAROON);
+    DrawRectangleRec(healthBarHighlight, RED);
 
     float energyRatio = p->energy / p->maxEnergy;
     if (energyRatio < 0.0f) energyRatio = 0.0f;
     if (energyRatio > 1.0f) energyRatio = 1.0f;
 
-    DrawRectangle((int)barX, (int)blueY, (int)(blueBarW * energyRatio), (int)barH, DARKBLUE);
-    DrawRectangle((int)barX, (int)blueY, (int)(blueBarW * energyRatio), (int)(barH / 2.0f), BLUE);
+    Rectangle energyBarBack = { barX, blueY, blueBarW, barH };
+    Rectangle energyBarFront = { barX, blueY, blueBarW * energyRatio, barH };
+    Rectangle energyBarHighlight = { barX, blueY, blueBarW * energyRatio, barH / 2.0f };
+
+    DrawRectangleRec(energyBarBack, (Color){ 8, 20, 45, 180 });
+    DrawRectangleRec(energyBarFront, DARKBLUE);
+    DrawRectangleRec(energyBarHighlight, BLUE);
 }
 
 /*

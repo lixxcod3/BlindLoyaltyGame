@@ -126,6 +126,40 @@ static void DrawOneTile(
     DrawTexturePro(tex, src, dst, (Vector2){ 0, 0 }, 0.0f, WHITE);
 }
 
+static bool LoadTilesetsForMap(Tilemap *map, const char *jsonFile) {
+    if (strstr(jsonFile, "map2") != NULL) {
+        map->texWalls = LoadTexture("maps/map2/walls_components.png");
+        map->texDecor = LoadTexture("maps/map2/walls_components.png");
+        map->texFloor = LoadTexture("maps/map2/walls_components.png");
+
+        if (map->texWalls.id <= 0 || map->texDecor.id <= 0 || map->texFloor.id <= 0) {
+            return false;
+        }
+
+        map->gidWalls = 1;
+        map->gidDecor = 1;
+        map->gidFloor = 1;
+    } else {
+        map->texWalls = LoadTexture("maps/map1/walls_floor.png");
+        map->texDecor = LoadTexture("maps/map1/decorative_cracks_floor.png");
+        map->texFloor = LoadTexture("maps/map1/floor_tile.png");
+
+        if (map->texWalls.id <= 0 || map->texDecor.id <= 0 || map->texFloor.id <= 0) {
+            return false;
+        }
+
+        map->gidWalls = 1;
+        map->gidDecor = 494;
+        map->gidFloor = 614;
+    }
+
+    map->colsWalls = map->texWalls.width / map->tileWidth;
+    map->colsDecor = map->texDecor.width / map->tileWidth;
+    map->colsFloor = map->texFloor.width / map->tileWidth;
+
+    return true;
+}
+
 /*
  * Load map dimensions, layers, and tileset textures from a JSON file.
  *
@@ -164,28 +198,11 @@ bool LoadTilemap(Tilemap *map, const char *jsonFile) {
         return false;
     }
 
-    map->texWalls = LoadTexture("maps/map1/walls_floor.png");
-    map->texDecor = LoadTexture("maps/map1/decorative_cracks_floor.png");
-    map->texFloor = LoadTexture("maps/map1/floor_tile.png");
-
-    if (map->texWalls.id <= 0 || map->texDecor.id <= 0 || map->texFloor.id <= 0) {
+    if (!LoadTilesetsForMap(map, jsonFile)) {
         TraceLog(LOG_ERROR, "Failed to load one or more tileset textures");
         UnloadFileText(json);
         return false;
     }
-
-    /*
-     * Tileset global ID ranges.
-     * These values must match the tileset configuration used by the map file.
-     */
-    map->gidWalls = 1;
-    map->gidDecor = 494;
-    map->gidFloor = 614;
-
-    /* Cache the number of tile columns in each texture for source lookup. */
-    map->colsWalls = map->texWalls.width / map->tileWidth;
-    map->colsDecor = map->texDecor.width / map->tileWidth;
-    map->colsFloor = map->texFloor.width / map->tileWidth;
 
     /*
      * Read tile data by layer order:

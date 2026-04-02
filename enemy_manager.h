@@ -7,6 +7,8 @@
 #include "enemy.h"
 #include "bandit.h"
 #include "boss_bandit.h"
+#include "security_guard.h"
+#include "oasis_media_ceo.h"
 
 /*
  * Enemy spawn configuration.
@@ -22,7 +24,7 @@
  * Distance values are used to prevent enemies from spawning
  * too close to the player.
  */
-#define MAX_REGULAR_ENEMIES 5
+#define MAX_REGULAR_ENEMIES 7
 #define INITIAL_REGULAR_ENEMIES 2
 #define REGULAR_RESPAWN_DELAY 22.0f
 #define INITIAL_REGULAR_SPAWN_DELAY 5.0f
@@ -39,6 +41,7 @@
  * - bossSpawnTimer: Countdown until the boss appears
  * - initialRegularsSpawned: Tracks whether the first regular wave has already spawned
  * - bossSpawned: Tracks whether the boss has already spawned
+ * - useSecurityTheme: Tracks whether this gameplay uses bandits or security guards
  */
 typedef struct EnemySpawner {
     float regularRespawnTimer;
@@ -46,12 +49,13 @@ typedef struct EnemySpawner {
     float bossSpawnTimer;
     bool initialRegularsSpawned;
     bool bossSpawned;
+    bool useSecurityTheme;
 } EnemySpawner;
 
 /*
  * Initialize the spawner with default timers and reset all spawn flags.
  */
-void InitEnemySpawner(EnemySpawner *spawner);
+void InitEnemySpawner(EnemySpawner *spawner, bool useSecurityTheme);
 
 /*
  * Update all enemy spawn logic.
@@ -131,15 +135,32 @@ static Vector2 FindEnemySpawnWithDistance(const Tilemap *map, Vector2 playerPos,
     return FindWalkableSpawn(map);
 }
 
+static void SpawnRegularEnemyForTheme(bool useSecurityTheme, Enemy *enemy, Vector2 pos) {
+    if (useSecurityTheme) {
+        InitSecurityGuard(enemy, pos);
+    } else {
+        InitBandit(enemy, pos);
+    }
+}
+
+static void SpawnBossEnemyForTheme(bool useSecurityTheme, Enemy *boss, Vector2 pos) {
+    if (useSecurityTheme) {
+        InitOasisMediaCEO(boss, pos);
+    } else {
+        InitBossBandit(boss, pos);
+    }
+}
+
 /*
  * Reset all spawn timers and flags to their starting values.
  */
-void InitEnemySpawner(EnemySpawner *spawner) {
+void InitEnemySpawner(EnemySpawner *spawner, bool useSecurityTheme) {
     spawner->regularRespawnTimer = REGULAR_RESPAWN_DELAY;
     spawner->initialRegularSpawnTimer = INITIAL_REGULAR_SPAWN_DELAY;
     spawner->bossSpawnTimer = BOSS_SPAWN_DELAY;
     spawner->initialRegularsSpawned = false;
     spawner->bossSpawned = false;
+    spawner->useSecurityTheme = useSecurityTheme;
 }
 
 /*
@@ -173,7 +194,7 @@ void UpdateEnemySpawns(EnemySpawner *spawner, float dt, Enemy regulars[], int re
                 boss
             );
 
-            InitBandit(&regulars[i], pos);
+            SpawnRegularEnemyForTheme(spawner->useSecurityTheme, &regulars[i], pos);
 
             if (regulars[i].active) {
                 spawned++;
@@ -196,7 +217,7 @@ void UpdateEnemySpawns(EnemySpawner *spawner, float dt, Enemy regulars[], int re
             boss
         );
 
-        InitBossBandit(boss, pos);
+        SpawnBossEnemyForTheme(spawner->useSecurityTheme, boss, pos);
         spawner->bossSpawned = true;
     }
 
@@ -236,7 +257,7 @@ void UpdateEnemySpawns(EnemySpawner *spawner, float dt, Enemy regulars[], int re
                 );
 
                 if (CanEnemyOccupy(pos, map)) {
-                    InitBandit(&regulars[freeSlot], pos);
+                    SpawnRegularEnemyForTheme(spawner->useSecurityTheme, &regulars[freeSlot], pos);
                 }
             }
 
