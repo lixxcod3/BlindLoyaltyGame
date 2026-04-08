@@ -26,6 +26,7 @@ typedef struct {
     CharState state;
     bool facingRight;
     bool isGrounded;  
+    bool hasHealed;
     int health;
     
     // Animation properties
@@ -43,7 +44,7 @@ typedef struct {
 } Character;
 
 // Function prototypes
-void InitCharacter(Character* c, Vector2 startPos, bool isPlayer);
+void InitCharacter(Character* c, Vector2 startPos, int charType);
 void UpdateCharacter(Character* c, Character* opponent, float dt, bool isPlayer);
 void DrawCharacter(Character* c);
 void DrawGameUI(int playerHealth, int enemyHealth, int timeRemaining, int screenWidth);

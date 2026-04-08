@@ -124,46 +124,81 @@ SceneData scene20_2_1_data = { .bgPath = "images/Background/Scene/Scene20_2_1.jp
 SceneData scene21_2_1_data = { .bgPath = "images/Background/Scene/Scene21_2_1.jpg", .bgScrollSpeed = 0.0f, .doFadeIn = true, .doFadeOut = true, };
 SceneData scene18_2_2_data = { .bgPath = "images/Background/Scene/Scene18_2_2.jpg", .bgScrollSpeed = 0.0f, .doFadeIn = true, .doFadeOut = true, };
 
-
 // --- TEKKEN MINIGAME ENGINE FUNCTIONS ---
 const float GRAVITY = 1200.0f;
 const float JUMP_FORCE = -550.0f;
 const float GROUND_Y = 680.0f; 
 
-void InitCharacter(Character* c, Vector2 startPos, bool isPlayer) {
+// charType: 0 = Player, 1 = Samurai, 2 = Viking
+// charType: 0 = Player, 1 = Samurai, 2 = Viking
+void InitCharacter(Character* c, Vector2 startPos, int charType) {
     c->position = startPos;
     c->velocity = (Vector2){ 0, 0 };
     c->state = STATE_IDLE;
-    c->facingRight = isPlayer;
+    c->facingRight = (charType == 0);
     c->isGrounded = false;
     c->health = 100;
     c->aiTimer = 0.0f;
+    c->hasHealed = false; // <-- Added this to reset the heal ability
     
-    // Load Textures from different folders depending on if it's the player or enemy
-    const char* basePath = isPlayer ? "images/Character/Fighter" : "images/Character/Samurai";
+    // Switch load paths
+    const char* basePath = "";
+    if (charType == 0) basePath = "images/Character/Fighter";
+    else if (charType == 2) basePath = "images/Character/Samurai";
+    else if (charType == 1) basePath = "images/Character/Warrior_3";
 
     c->textures[STATE_IDLE] = LoadTexture(TextFormat("%s/Idle.png", basePath));
     c->textures[STATE_WALK] = LoadTexture(TextFormat("%s/Walk.png", basePath));
     c->textures[STATE_RUN] = LoadTexture(TextFormat("%s/Run.png", basePath));
     c->textures[STATE_JUMP] = LoadTexture(TextFormat("%s/Jump.png", basePath));
-    c->textures[STATE_SHIELD] = LoadTexture(TextFormat("%s/Shield.png", basePath));
     c->textures[STATE_ATTACK_1] = LoadTexture(TextFormat("%s/Attack_1.png", basePath));
     c->textures[STATE_ATTACK_2] = LoadTexture(TextFormat("%s/Attack_2.png", basePath));
-    c->textures[STATE_ATTACK_3] = LoadTexture(TextFormat("%s/Attack_3.png", basePath));
     c->textures[STATE_HURT] = LoadTexture(TextFormat("%s/Hurt.png", basePath));
     c->textures[STATE_DEAD] = LoadTexture(TextFormat("%s/Dead.png", basePath));
+
+    if (charType ==1) { // Specific names for the new character set
+        c->textures[STATE_SHIELD] = LoadTexture(TextFormat("%s/Protect.png", basePath));
+        c->textures[STATE_ATTACK_3] = LoadTexture(TextFormat("%s/Run+Attack.png", basePath));
+    } else {
+        c->textures[STATE_SHIELD] = LoadTexture(TextFormat("%s/Shield.png", basePath));
+        c->textures[STATE_ATTACK_3] = LoadTexture(TextFormat("%s/Attack_3.png", basePath));
+    }
     
-    // Frame Counts
-    c->frameCounts[STATE_IDLE] = 6;
-    c->frameCounts[STATE_WALK] = 8;
-    c->frameCounts[STATE_RUN] = 8;
-    c->frameCounts[STATE_JUMP] = isPlayer ? 10 : 12;; 
-    c->frameCounts[STATE_SHIELD] = 2;
-    c->frameCounts[STATE_ATTACK_1] = isPlayer ? 4 : 6; 
-    c->frameCounts[STATE_ATTACK_2] = isPlayer ? 3 : 4; 
-    c->frameCounts[STATE_ATTACK_3] = isPlayer ? 4 : 3;
-    c->frameCounts[STATE_HURT] = isPlayer ? 3 : 2;
-    c->frameCounts[STATE_DEAD] = 3;
+    // Frame Counts mapping
+    if (charType == 0) {
+        c->frameCounts[STATE_IDLE] = 6;
+        c->frameCounts[STATE_WALK] = 8;
+        c->frameCounts[STATE_RUN] = 8;
+        c->frameCounts[STATE_JUMP] = 10;
+        c->frameCounts[STATE_SHIELD] = 2;
+        c->frameCounts[STATE_ATTACK_1] = 4;
+        c->frameCounts[STATE_ATTACK_2] = 3;
+        c->frameCounts[STATE_ATTACK_3] = 4;
+        c->frameCounts[STATE_HURT] = 3;
+        c->frameCounts[STATE_DEAD] = 3;
+    } else if (charType == 1) {
+        c->frameCounts[STATE_IDLE] = 5;
+        c->frameCounts[STATE_WALK] = 8;
+        c->frameCounts[STATE_RUN] = 6;
+        c->frameCounts[STATE_JUMP] = 8;
+        c->frameCounts[STATE_SHIELD] = 3;
+        c->frameCounts[STATE_ATTACK_1] = 4;
+        c->frameCounts[STATE_ATTACK_2] = 3;
+        c->frameCounts[STATE_ATTACK_3] = 4;
+        c->frameCounts[STATE_HURT] = 2;
+        c->frameCounts[STATE_DEAD] = 4;
+    } else if (charType == 2) {
+        c->frameCounts[STATE_IDLE] = 6;
+        c->frameCounts[STATE_WALK] = 8;
+        c->frameCounts[STATE_RUN] = 8;
+        c->frameCounts[STATE_JUMP] = 12;
+        c->frameCounts[STATE_SHIELD] = 2;
+        c->frameCounts[STATE_ATTACK_1] = 6;
+        c->frameCounts[STATE_ATTACK_2] = 4;
+        c->frameCounts[STATE_ATTACK_3] = 3;
+        c->frameCounts[STATE_HURT] = 2;
+        c->frameCounts[STATE_DEAD] = 3;
+    }
     
     c->currentFrame = 0;
     c->frameTimer = 0.0f;
@@ -191,10 +226,9 @@ void UpdateCharacter(Character* c, Character* opponent, float dt, bool isPlayer)
         c->state != STATE_ATTACK_1 && c->state != STATE_ATTACK_2 && c->state != STATE_ATTACK_3) 
     {
         bool isMoving = false;
-        float moveSpeed = IsKeyDown(KEY_LEFT_SHIFT) ? 500.0f : 250.0f; // Shift to Run
+        float moveSpeed = IsKeyDown(KEY_LEFT_SHIFT) ? 500.0f : 250.0f;
         CharState moveState = IsKeyDown(KEY_LEFT_SHIFT) ? STATE_RUN : STATE_WALK;
 
-        // A and D to move
         if (IsKeyDown(KEY_D)) {
             c->position.x += moveSpeed * dt;
             if (c->isGrounded) c->state = moveState;
@@ -207,42 +241,40 @@ void UpdateCharacter(Character* c, Character* opponent, float dt, bool isPlayer)
             isMoving = true;
         } 
         
-        // S to Shield
         if (IsKeyDown(KEY_S) && c->isGrounded && !isMoving) {
             c->state = STATE_SHIELD;
         } else if (!isMoving && c->isGrounded && c->state != STATE_SHIELD) {
             c->state = STATE_IDLE;
         }
 
-        // SPACE to Jump
         if (IsKeyPressed(KEY_SPACE) && c->isGrounded) {
             c->velocity.y = JUMP_FORCE;
             c->state = STATE_JUMP;
             c->currentFrame = 0;
         }
 
-        // Left Click, Right Click, E to Attack
         if ((IsMouseButtonPressed(MOUSE_BUTTON_LEFT) || IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) || IsKeyPressed(KEY_E)) && c->isGrounded) {
             int damage = 10;
 
-            if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-                c->state = STATE_ATTACK_1;
-                damage = 10;
-            } else if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) {
-                c->state = STATE_ATTACK_2;
-                damage = 15;
-            } else if (IsKeyPressed(KEY_E)) {
-                c->state = STATE_ATTACK_3;
-                damage = 25; // Heavy Attack
-            }
+            if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) { c->state = STATE_ATTACK_1; damage = 10; } 
+            else if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT)) { c->state = STATE_ATTACK_2; damage = 15; } 
+            else if (IsKeyPressed(KEY_E)) { c->state = STATE_ATTACK_3; damage = 25; }
+            
             c->currentFrame = 0; 
             
             // Hit detection against Enemy
             if (fabs(c->position.x - opponent->position.x) < 140.0f && opponent->state != STATE_DEAD) {
                 
-                // SHIELD FIX: Enemy takes 0 damage if shielding
+                // --- AI FEATURE: Smart Blocking ---
+                if (opponent->state == STATE_IDLE || opponent->state == STATE_WALK || opponent->state == STATE_RUN) {
+                    if (GetRandomValue(1, 100) <= 75) { 
+                        opponent->state = STATE_SHIELD;
+                        opponent->currentFrame = 0;
+                    }
+                }
+
                 if (opponent->state == STATE_SHIELD) {
-                    damage = 0; 
+                    damage = 0; // Blocked
                 } else {
                     opponent->state = STATE_HURT;
                     opponent->currentFrame = 0;
@@ -257,7 +289,7 @@ void UpdateCharacter(Character* c, Character* opponent, float dt, bool isPlayer)
             }
         }
     } 
-    // ENEMY AI LOGIC (CHASING & RANDOM ATTACKS)
+    // ENEMY AI LOGIC (CHASING, RANDOM ATTACKS, FLEEING)
     else if (!isPlayer && c->state != STATE_DEAD && c->state != STATE_HURT && 
              c->state != STATE_ATTACK_1 && c->state != STATE_ATTACK_2 && c->state != STATE_ATTACK_3) 
     {
@@ -266,14 +298,35 @@ void UpdateCharacter(Character* c, Character* opponent, float dt, bool isPlayer)
 
         c->aiTimer -= dt;
 
-        // If far away, chase the player
-        if (distanceToPlayer > 120.0f) {
-            c->position.x += (c->facingRight ? 220.0f : -220.0f) * dt;
-            if (c->isGrounded) c->state = STATE_WALK;
+        // --- NEW AI FEATURE: Flee under 20% health, hit border, and heal once ---
+        if (c->health < 20 && !c->hasHealed) {
+            c->facingRight = (opponent->position.x < c->position.x); // Face away from player
+            float moveDir = (opponent->position.x > c->position.x) ? -1.0f : 1.0f;
+            c->position.x += moveDir * 320.0f * dt; // Run away quickly
+            if (c->isGrounded) c->state = STATE_RUN;
+
+            // Check if the enemy has hit the screen borders (5px buffer from the edge limits)
+            if (c->position.x <= 55.0f || c->position.x >= 1225.0f) {
+                c->health += 40; // Heal 40%
+                if (c->health > 100) c->health = 100; // Cap at max
+                c->hasHealed = true; // Ability used up
+            }
+        }
+        // --- NEW AI FEATURE: Chase player dynamically ---
+        else if (distanceToPlayer > 120.0f) {
+            if (distanceToPlayer > 300.0f) {
+                // If the player is far away (running), the enemy sprints to catch up
+                c->position.x += (c->facingRight ? 320.0f : -320.0f) * dt;
+                if (c->isGrounded) c->state = STATE_RUN;
+            } else {
+                // Normal walking distance
+                c->position.x += (c->facingRight ? 220.0f : -220.0f) * dt;
+                if (c->isGrounded) c->state = STATE_WALK;
+            }
         } 
         // If close enough, stop walking and randomly attack
         else {
-            if (c->isGrounded && c->state != STATE_IDLE) c->state = STATE_IDLE;
+            if (c->isGrounded && c->state != STATE_IDLE && c->state != STATE_SHIELD) c->state = STATE_IDLE;
 
             if (c->aiTimer <= 0.0f && opponent->state != STATE_DEAD) {
                 int randAttack = GetRandomValue(1, 3);
@@ -284,9 +337,10 @@ void UpdateCharacter(Character* c, Character* opponent, float dt, bool isPlayer)
                 else { c->state = STATE_ATTACK_3; damage = 25; }
 
                 c->currentFrame = 0;
-                c->aiTimer = GetRandomValue(10, 25) / 10.0f; 
+                
+                // --- AI FEATURE: Truly randomized, aggressive attack pacing ---
+                c->aiTimer = GetRandomValue(4, 16) / 10.0f; 
 
-                // SHIELD FIX: Player takes 0 damage if shielding
                 if (opponent->state == STATE_SHIELD) {
                     damage = 0; 
                 } else {
@@ -304,11 +358,9 @@ void UpdateCharacter(Character* c, Character* opponent, float dt, bool isPlayer)
         }
     }
 
-    // --- SCREEN BOUNDARY FIX ---
-    // Prevent characters from walking off the 1280 pixel wide screen
+    // Screen Boundary Limit
     if (c->position.x < 50.0f) c->position.x = 50.0f;
     if (c->position.x > 1230.0f) c->position.x = 1230.0f;
-    // ---------------------------
 
     // Animation Loop
     c->frameTimer += dt;
@@ -480,11 +532,13 @@ int main(void) {
     // --- TEKKEN MINIGAME VARIABLES ---
     Character playerTekken;
     Character enemyTekken;
+    int currentTekkenFight = 1; // 1 = After 16_2, 2 = After 19_2_1
     float tekkenTimer = 99.0f;
     float tekkenEndDelay = 0.0f;
     bool showTekkenControls = false;
     Tilemap tekkenMap = { 0 };
     Texture2D tekkenBg = { 0 };
+    Texture2D tekkenBg2 = { 0 };
     // ---------------------------------
 
     StoryScene scene1 = { 0 }; StoryScene scene2 = { 0 }; StoryScene scene3 = { 0 };
@@ -542,7 +596,7 @@ int main(void) {
             StopSound(battleSfx);
             StopSound(clappingSfx);
 
-            if (currentScreen == SCREEN_SCENE15_2 || currentScreen == SCREEN_SCENE18_2_1 || currentScreen == SCREEN_TEKKEN_FIGHT) {
+            if (currentScreen == SCREEN_SCENE15_2 || currentScreen == SCREEN_TEKKEN_FIGHT) {
                 PlaySound(battleSfx);
             }
             else if (currentScreen == SCREEN_SCENE21_2_1 || currentScreen == SCREEN_SCENE18_2_2) {
@@ -586,6 +640,7 @@ int main(void) {
                     menu.saveBg = LoadTexture("images/GUI/Gamesave.png");
                     
                     tekkenBg = LoadTexture("images/Background/Arena/arena1/arena1.png"); 
+                    tekkenBg2 = LoadTexture("images/Background/Arena/arena2/arena2.png"); 
                     
                     menuMusic = LoadMusicStream("music/MainMenu.ogg");
                     storyMusic = LoadMusicStream("music/Story.ogg");
@@ -619,9 +674,9 @@ int main(void) {
                     
                     LoadTilemap(&tekkenMap, "images/Background/Arena/arena1/arena1.json"); 
                     
-                    // PRELOAD TEKKEN CHARACTERS
-                    InitCharacter(&playerTekken, (Vector2){ 250, 100 }, true);
-                    InitCharacter(&enemyTekken, (Vector2){ 850, 100 }, false);
+                    // PRELOAD TEKKEN CHARACTERS (Default for Fight 1)
+                    InitCharacter(&playerTekken, (Vector2){ 250, 100 }, 0);
+                    InitCharacter(&enemyTekken, (Vector2){ 850, 100 }, 1); // Samurai
 
                     loadProgress = 0.16f;
                     loadStep++;
@@ -765,14 +820,43 @@ int main(void) {
                 else if (currentScreen == SCREEN_SCENE13_2) { UpdateStoryScene(&scene13_2, vMouse, mouseClicked, vWidth); if (scene13_2.currentState == SCENE_STATE_DONE) currentScreen = SCREEN_SCENE14_2; }
                 else if (currentScreen == SCREEN_SCENE14_2) { UpdateStoryScene(&scene14_2, vMouse, mouseClicked, vWidth); if (scene14_2.currentState == SCENE_STATE_DONE) currentScreen = SCREEN_SCENE15_2; }
                 else if (currentScreen == SCREEN_SCENE15_2) { UpdateStoryScene(&scene15_2, vMouse, mouseClicked, vWidth); if (scene15_2.currentState == SCENE_STATE_DONE) currentScreen = SCREEN_SCENE16_2; }
-                else if (currentScreen == SCREEN_SCENE16_2) { UpdateStoryScene(&scene16_2, vMouse, mouseClicked, vWidth); if (scene16_2.currentState == SCENE_STATE_DONE) currentScreen = SCREEN_SCENE17_2; }
                 
-                // --------- LAUNCH TEKKEN FIGHT AFTER SCENE 17_2 ---------
+                // --------- LAUNCH TEKKEN FIGHT 1 AFTER SCENE 16_2 ---------
+                else if (currentScreen == SCREEN_SCENE16_2) {
+                    UpdateStoryScene(&scene16_2, vMouse, mouseClicked, vWidth);
+                    if (scene16_2.currentState == SCENE_STATE_DONE) {
+                        currentTekkenFight = 1;
+                        InitCharacter(&playerTekken, (Vector2){ 250, 100 }, 0); // Player
+                        InitCharacter(&enemyTekken, (Vector2){ 850, 100 }, 1); // Samurai
+                        tekkenTimer = 99.0f;
+                        tekkenEndDelay = 0.0f;
+                        showTekkenControls = true;
+                        currentScreen = SCREEN_TEKKEN_FIGHT; 
+                    }
+                }
+                // -----------------------------------------------------------
+                
                 else if (currentScreen == SCREEN_SCENE17_2) {
                     UpdateStoryScene(&scene17_2, vMouse, mouseClicked, vWidth);
                     if (scene17_2.currentState == SCENE_STATE_DONE) {
-                        InitCharacter(&playerTekken, (Vector2){ 250, 100 }, true);
-                        InitCharacter(&enemyTekken, (Vector2){ 850, 100 }, false);
+                        if (scene17_2.selectedChoice == 1) currentScreen = SCREEN_SCENE18_2_1;
+                        else currentScreen = SCREEN_SCENE18_2_2;
+                    }
+                }
+                
+                // --- NEW: Scene 18_2_1 just proceeds normally to 19_2_1 ---
+                else if (currentScreen == SCREEN_SCENE18_2_1) { 
+                    UpdateStoryScene(&scene18_2_1, vMouse, mouseClicked, vWidth); 
+                    if (scene18_2_1.currentState == SCENE_STATE_DONE) currentScreen = SCREEN_SCENE19_2_1; 
+                }
+                
+                // --------- LAUNCH TEKKEN FIGHT 2 AFTER SCENE 19_2_1 ---------
+                else if (currentScreen == SCREEN_SCENE19_2_1) {
+                    UpdateStoryScene(&scene19_2_1, vMouse, mouseClicked, vWidth);
+                    if (scene19_2_1.currentState == SCENE_STATE_DONE) {
+                        currentTekkenFight = 2;
+                        InitCharacter(&playerTekken, (Vector2){ 250, 100 }, 0); // Player
+                        InitCharacter(&enemyTekken, (Vector2){ 850, 100 }, 2); // Viking
                         tekkenTimer = 99.0f;
                         tekkenEndDelay = 0.0f;
                         showTekkenControls = true;
@@ -781,11 +865,6 @@ int main(void) {
                 }
                 // -----------------------------------------------------------
 
-                else if (currentScreen == SCREEN_SCENE18_2_1) {
-                    UpdateStoryScene(&scene18_2_1, vMouse, mouseClicked, vWidth);
-                    if (scene18_2_1.currentState == SCENE_STATE_DONE) currentScreen = SCREEN_SCENE19_2_1; 
-                }
-                else if (currentScreen == SCREEN_SCENE19_2_1) { UpdateStoryScene(&scene19_2_1, vMouse, mouseClicked, vWidth); if (scene19_2_1.currentState == SCENE_STATE_DONE) currentScreen = SCREEN_SCENE20_2_1; }
                 else if (currentScreen == SCREEN_SCENE20_2_1) { UpdateStoryScene(&scene20_2_1, vMouse, mouseClicked, vWidth); if (scene20_2_1.currentState == SCENE_STATE_DONE) currentScreen = SCREEN_SCENE21_2_1; }
                 else if (currentScreen == SCREEN_SCENE21_2_1) {
                     UpdateStoryScene(&scene21_2_1, vMouse, mouseClicked, vWidth);
@@ -839,11 +918,12 @@ int main(void) {
                         if (tekkenEndDelay > 3.0f && !fadeOutMusic) { 
                             fadeOutMusic = true;
                             if (enemyTekken.health <= 0 || (tekkenTimer <= 0 && playerTekken.health > enemyTekken.health)) {
-                                // Route based on scene17_2 choice
-                                if (scene17_2.selectedChoice == 1) {
-                                    nextScreenAfterFade = SCREEN_SCENE18_2_1; 
+                                // Decide next screen based on which fight it was
+                                if (currentTekkenFight == 1) {
+                                    nextScreenAfterFade = SCREEN_SCENE17_2; 
                                 } else {
-                                    nextScreenAfterFade = SCREEN_SCENE18_2_2;
+                                    // --- NEW: Fight 2 routes to 20_2_1 instead of 19_2_1 ---
+                                    nextScreenAfterFade = SCREEN_SCENE20_2_1;
                                 }
                             } else {
                                 nextScreenAfterFade = SCREEN_MENU; 
@@ -944,9 +1024,10 @@ render_phase:
                 ClearBackground(BLACK);
                 
                 // Draw the Arena Background scaled to fit the 1280x720 window
+                Texture2D currentBg = (currentTekkenFight == 2) ? tekkenBg2 : tekkenBg;
                 DrawTexturePro(
-                    tekkenBg, 
-                    (Rectangle){ 0, 0, tekkenBg.width, tekkenBg.height }, 
+                    currentBg, 
+                    (Rectangle){ 0, 0, currentBg.width, currentBg.height }, 
                     (Rectangle){ 0, 0, vWidth, vHeight }, 
                     (Vector2){ 0, 0 }, 
                     0.0f, 
@@ -1066,6 +1147,7 @@ cleanup:
         UnloadTexture(enemyTekken.textures[i]);
     }
     UnloadTexture(tekkenBg);
+    UnloadTexture(tekkenBg2);
     UnloadTilemap(&tekkenMap);
     // ----------------------
 
